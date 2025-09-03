@@ -20,6 +20,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/timer/system_timer.h>
@@ -77,29 +79,39 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #define LED0_NODE DT_ALIAS(bootloader_led0)
 #endif
 
-#if DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, gpios)
-static const struct gpio_dt_spec led0 = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+#if DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, pwms)
+static const struct device *led0 = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds));
 #else
 /* A build error here means your board isn't set up to drive an LED. */
 #error "Unsupported board: led0 devicetree alias is not defined"
 #endif
 
-BOOT_LOG_MODULE_DECLARE(mcuboot);
+// BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 void io_led_init(void)
 {
-    if (!device_is_ready(led0.port)) {
+    if (!device_is_ready(led0)) {
         BOOT_LOG_ERR("Didn't find LED device referred by the LED0_NODE\n");
         return;
     }
-
-    gpio_pin_configure_dt(&led0, GPIO_OUTPUT);
-    gpio_pin_set_dt(&led0, 0);
+    led_off(led0, 0);
 }
 
 void io_led_set(int value)
 {
-    gpio_pin_set_dt(&led0, value);
+    int err = 0;
+    if(value){
+        BOOT_LOG_INF("led blink");
+        err |= led_blink(led0, 0, 1000, 1000);
+        if (err < 0) {
+            BOOT_LOG_INF("err=%d\n", err);
+            return;
+        }
+    }
+    else{
+        led_off(led0, 0);
+        BOOT_LOG_INF("led off");
+    }
 }
 #endif /* CONFIG_MCUBOOT_INDICATION_LED */
 
@@ -124,10 +136,27 @@ static const struct gpio_dt_spec button0 = GPIO_DT_SPEC_GET(BUTTON_0_NODE, gpios
 #error "Serial recovery/USB DFU button must be declared in device tree as 'mcuboot_button0'"
 #endif
 
+bool read_button(void)
+{
+    int pin_active;
+    pin_active = gpio_pin_get_dt(&button0);
+    if(pin_active){
+    #ifdef CONFIG_MULTITHREADING
+            k_sleep(K_MSEC(50));
+    #else
+            k_busy_wait(50000);
+    #endif
+        return gpio_pin_get_dt(&button0);
+    }
+    else
+        return pin_active;
+}
+
 bool io_detect_pin(void)
 {
     int rc;
     int pin_active;
+    int ret = false;;
 
     if (!device_is_ready(button0.port)) {
         __ASSERT(false, "GPIO device is not ready.\n");
@@ -162,9 +191,15 @@ bool io_detect_pin(void)
                 uint32_t delta = k_uptime_get() -  timestamp;
 
                 /* If not pressed OR if pressed > debounce period, stop. */
-                if (delta >= BUTTON_0_DETECT_DELAY || !pin_active) {
+                if (delta >= BUTTON_0_DETECT_DELAY * 1000) {
+                    ret = true;
                     break;
                 }
+                if(!pin_active)
+                {
+                    break;
+                }
+                    
 
                 /* Delay 1 ms */
 #ifdef CONFIG_MULTITHREADING
@@ -175,8 +210,7 @@ bool io_detect_pin(void)
             }
         }
     }
-
-    return (bool)pin_active;
+    return (bool)ret;
 }
 #endif
 

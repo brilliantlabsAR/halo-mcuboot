@@ -39,26 +39,37 @@ void boot_ble_start(void)
     __ASSERT(le_init() == 0, "le_init failed");
     le_adv_start();
 
+    bool _reset = false, _reset_wait = false;
+
 #ifdef CONFIG_BOOT_BLE_DFU_ENTRANCE_GPIO
-    uint32_t start_time = k_uptime_get_32();
-    bool _reset_wait = false;
-    bool _reset = false;
+    le_update_activity();
+    uint32_t interval = 0;
+    uint32_t last_printed_second = 0;
+    uint32_t current_second = 0;
 
     while (1)
     {
         k_sleep(K_MSEC(50));
         if (le_is_connected())
         {
-            start_time = k_uptime_get_32();
+            le_update_activity();
         }
-
-        if (k_uptime_get_32() - start_time > CONFIG_BOOT_BLE_DFU_IDLE_TIMEOUT * 1000)
+        
+        interval = k_uptime_get_32() - le_get_last_activity();
+        if (interval > CONFIG_BOOT_BLE_DFU_IDLE_TIMEOUT * 1000)
         {
             BOOT_LOG_INF("No activity detected for %u seconds, exiting DFU mode", CONFIG_BOOT_BLE_DFU_IDLE_TIMEOUT);
+            io_led_set(0);
             sys_reboot(SYS_REBOOT_COLD);
         }
+        
+        current_second = interval / 1000;
+        if (current_second != last_printed_second) {
+            printf("interval: %d s\r", current_second);
+            last_printed_second = current_second;
+        }
 
-        if (io_detect_pin() == 0)
+        if (read_button() == 0)
         {
             if (_reset)
             {
@@ -71,7 +82,7 @@ void boot_ble_start(void)
                 _reset_wait = true;
             }
         }
-        if (io_detect_pin() == 1)
+        if (read_button() == 1)
         {
             if (_reset_wait)
             {

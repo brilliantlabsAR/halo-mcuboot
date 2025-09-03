@@ -424,6 +424,7 @@ static void boot_ble_enter()
     BOOT_LOG_INF("Enter the BLE DFU mode");
     boot_ble_start();
     __ASSERT(0, "Bootloader BLE process was terminated unexpectedly.\n");
+    io_led_set(0);
 }
 #endif
 
@@ -483,12 +484,15 @@ int main(void)
 #endif
 
 #ifdef CONFIG_BOOT_BLE_DFU_ENTRANCE_GPIO
+    //  boot_ble_enter();
+
     if (io_detect_pin())
     {
         /* Boot mode to stay in bootloader, clear status and enter BLE DFU mode
          */
         boot_ble_enter();
     }
+    
 #endif
 
 #ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
