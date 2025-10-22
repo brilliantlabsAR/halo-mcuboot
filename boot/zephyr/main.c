@@ -41,6 +41,12 @@
 #include "bootutil/mcuboot_status.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#ifdef CONFIG_HALO
+#include <halo/ble_manager.h>
+#include <halo/ble_connection.h>
+#include <halo/file_manager.h>
+#endif
+
 /* Check if Espressif target is supported */
 #ifdef CONFIG_SOC_FAMILY_ESP32
 
@@ -390,6 +396,101 @@ static void boot_serial_enter()
 }
 #endif
 
+#ifdef CONFIG_HALO
+/* BLE DFU entry reasons */
+typedef enum {
+    BLE_DFU_ENTRY_BUTTON,     /* Entered via button press */
+    BLE_DFU_ENTRY_NO_IMAGE    /* Entered because no bootable image found */
+} ble_dfu_entry_reason_t;
+
+static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
+{
+    int rc;
+    bool allow_exit = (reason == BLE_DFU_ENTRY_BUTTON);
+
+#ifdef CONFIG_MCUBOOT_INDICATION_LED
+    io_led_init();
+#endif
+
+    mcuboot_status_change(MCUBOOT_STATUS_BLE_DFU_ENTERED);
+
+    BOOT_LOG_INF("Enter the BLE DFU mode (reason: %s)",
+                 reason == BLE_DFU_ENTRY_BUTTON ? "button" : "no image");
+
+    io_led_set(100);
+
+    /* Initialize BLE manager for OTA */
+    rc = halo_ble_init(NULL);
+    if (rc < 0)
+    {
+        BOOT_LOG_ERR("Failed to initialize BLE manager: %d", rc);
+        return;
+    }
+
+    /* Format file system when entering BLE DFU mode */
+    BOOT_LOG_INF("Formatting file system for BLE DFU mode");
+    rc = halo_file_format();
+    if (rc < 0)
+    {
+        BOOT_LOG_ERR("Failed to format file system: %d", rc);
+        /* Continue anyway - file system formatting failure shouldn't prevent DFU */
+    }
+
+    /* Start BLE advertising */
+    struct halo_ble_adv_params adv_params = {
+        .interval_min = 40,  /* 0.625ms units, 40 = 25ms */
+        .interval_max = 200, /* 0.625ms units, 200 = 125ms */
+        .duration = 0,       /* Advertise indefinitely */
+        .channel_map = 0x07, /* All channels */
+    };
+    rc = halo_ble_adv_start(&adv_params);
+    if (rc < 0)
+    {
+        BOOT_LOG_ERR("Failed to start BLE advertising: %d", rc);
+        return;
+    }
+
+    /* Wait for button to be released if entered via button press */
+    if (allow_exit) {
+        BOOT_LOG_INF("Waiting for button to be released...");
+        while (io_detect_pin()) {
+            k_sleep(K_MSEC(50));
+        }
+        BOOT_LOG_INF("Button released, DFU mode active");
+    }
+
+    halo_ble_conn_update_activity();
+
+    while (1)
+    {
+        /* Check for inactivity timeout */
+        if (allow_exit && k_uptime_get_32() - halo_ble_conn_get_last_activity() > CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS)
+        {
+            BOOT_LOG_INF("Exiting BLE DFU mode due to inactivity (%d ms timeout)",
+                         CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS);
+            break;
+        }
+
+        /* Check for button press to exit (only if entered via button) */
+        if (allow_exit && io_detect_pin())
+        {
+            BOOT_LOG_INF("Exiting BLE DFU mode due to button press");
+            break;
+        }
+
+        // show inactivity timeout progress every 1000 ms
+        if (allow_exit && (k_uptime_get_32() % 1000) < 20) {
+            uint32_t elapsed = k_uptime_get_32() - halo_ble_conn_get_last_activity();
+            uint32_t remaining = (elapsed >= CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS) ?
+                                 0 : (CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS - elapsed);
+            BOOT_LOG_INF("BLE DFU inactivity timeout in %d/%d s", remaining / 1000, CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS / 1000);
+        }
+
+        k_sleep(K_MSEC(20));
+    }
+}
+#endif
+
 int main(void)
 {
     struct boot_rsp rsp;
@@ -417,6 +518,38 @@ int main(void)
     (void)rc;
 
     mcuboot_status_change(MCUBOOT_STATUS_STARTUP);
+
+    /* Check for button press > 10 seconds after reboot to enter BLE DFU */
+#if defined(CONFIG_HALO) && defined(CONFIG_BOOT_BLE_DFU_ENTRANCE_GPIO)
+    if (io_detect_pin()) {
+        BOOT_LOG_INF("Button pressed at startup, checking for 10s hold...");
+        uint32_t start_time = k_uptime_get_32();
+        bool button_held = true;
+
+        while (k_uptime_get_32() - start_time < CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS)
+        { /* Configurable hold time */
+            if (!io_detect_pin())
+            {
+                button_held = false;
+                break;
+            }
+            // show hold progress every 1000 ms
+            if ((k_uptime_get_32() - start_time) % 1000 < 20)
+            {
+                uint32_t elapsed = k_uptime_get_32() - start_time;
+                uint32_t remaining = (elapsed >= CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS) ? 0 : (CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS - elapsed);
+                BOOT_LOG_INF("Button hold time remaining: %d/%d s", remaining / 1000, CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS / 1000);
+            }
+            k_sleep(K_MSEC(20));
+        }
+
+        if (button_held) {
+            BOOT_LOG_INF("Button held for %d+ ms, entering BLE DFU mode",
+                         CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS);
+            boot_ble_dfu_enter(BLE_DFU_ENTRY_BUTTON);
+        }
+    }
+#endif
 
 #ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
     if (io_detect_pin() &&
@@ -479,6 +612,7 @@ int main(void)
 #endif
 #endif
 
+
     FIH_CALL(boot_go, fih_rc, &rsp);
 
 #ifdef CONFIG_BOOT_SERIAL_BOOT_MODE
@@ -508,11 +642,17 @@ int main(void)
 
         mcuboot_status_change(MCUBOOT_STATUS_NO_BOOTABLE_IMAGE_FOUND);
 
+#ifdef CONFIG_HALO
+        /* Enter BLE DFU mode when no bootable image is found */
+        BOOT_LOG_INF("No bootable image found, entering BLE DFU mode");
+        boot_ble_dfu_enter(BLE_DFU_ENTRY_NO_IMAGE);
+#else
 #ifdef CONFIG_BOOT_SERIAL_NO_APPLICATION
         /* No bootable image and configuration set to remain in serial
          * recovery mode
          */
         boot_serial_enter();
+#endif
 #endif
 
         FIH_PANIC;

@@ -1,0 +1,10 @@
+if HALO
+
+config BOOT_BLE_DFU_ENTRANCE_GPIO
+    bool "BLE DFU entrance via GPIO"
+    depends on GPIO
+    help
+      Use a GPIO to enter BLE DFU mode.
+
+endif
+

@@ -598,6 +598,8 @@ rsource "Kconfig.serial_recovery"
 
 rsource "Kconfig.firmware_loader"
 
+rsource "Kconfig.halo"
+
 config BOOT_INTR_VEC_RELOC
 	bool "Relocate the interrupt vector to the application"
 	default n

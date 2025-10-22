@@ -20,6 +20,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/timer/system_timer.h>
@@ -74,6 +76,8 @@
 
 #if DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, gpios)
 static const struct gpio_dt_spec led0 = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+#elif DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, pwms)
+static const struct device *led0 = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds));
 #else
 /* A build error here means your board isn't set up to drive an LED. */
 #error "Unsupported board: led0 devicetree alias is not defined"
@@ -83,30 +87,58 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 
 void io_led_init(void)
 {
-    if (!device_is_ready(led0.port)) {
+#if DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, gpios)
+    if (!device_is_ready(led0.port))
+    {
         BOOT_LOG_ERR("Didn't find LED device referred by the LED0_NODE\n");
         return;
     }
 
     gpio_pin_configure_dt(&led0, GPIO_OUTPUT);
     gpio_pin_set_dt(&led0, 0);
+#elif DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, pwms)
+    if (!device_is_ready(led0))
+    {
+        BOOT_LOG_ERR("Didn't find PWM device referred by the LED0_NODE\n");
+        return;
+    }
+   led_off(led0, 0);
+#endif
 }
 
 void io_led_set(int value)
 {
+#if DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, gpios)
     gpio_pin_set_dt(&led0, value);
+#elif DT_NODE_HAS_STATUS(LED0_NODE, okay) && DT_NODE_HAS_PROP(LED0_NODE, pwms)
+    if (value == 0)
+    {
+        led_off(led0, 0);
+    }
+    else if (value == 1)
+    {
+        led_on(led0, 0);
+    }
+    else
+    {
+        led_blink(led0, 0, value * 10, value * 10);
+    }
+
+#endif
 }
 #endif /* CONFIG_MCUBOOT_INDICATION_LED */
 
 #if defined(CONFIG_BOOT_SERIAL_ENTRANCE_GPIO) || defined(CONFIG_BOOT_USB_DFU_GPIO) || \
-    defined(CONFIG_BOOT_FIRMWARE_LOADER_ENTRANCE_GPIO)
+    defined(CONFIG_BOOT_FIRMWARE_LOADER_ENTRANCE_GPIO) || defined(CONFIG_BOOT_BLE_DFU_ENTRANCE_GPIO)
 
 #if defined(CONFIG_MCUBOOT_SERIAL)
 #define BUTTON_0_DETECT_DELAY CONFIG_BOOT_SERIAL_DETECT_DELAY
 #elif defined(CONFIG_BOOT_FIRMWARE_LOADER)
 #define BUTTON_0_DETECT_DELAY CONFIG_BOOT_FIRMWARE_LOADER_DETECT_DELAY
-#else
+#elif defined(CONFIG_BOOT_USB_DFU_GPIO)
 #define BUTTON_0_DETECT_DELAY CONFIG_BOOT_USB_DFU_DETECT_DELAY
+#else
+#define BUTTON_0_DETECT_DELAY 0
 #endif
 
 #define BUTTON_0_NODE DT_ALIAS(mcuboot_button0)
@@ -168,7 +200,7 @@ bool io_detect_pin(void)
             }
         }
     }
-
+    
     return (bool)pin_active;
 }
 #endif
