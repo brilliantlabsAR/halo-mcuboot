@@ -428,13 +428,17 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
     }
 
     /* Format file system when entering BLE DFU mode */
-    BOOT_LOG_INF("Formatting file system for BLE DFU mode");
-    rc = halo_file_format();
-    if (rc < 0)
+    if (reason == BLE_DFU_ENTRY_BUTTON)
     {
-        BOOT_LOG_ERR("Failed to format file system: %d", rc);
-        /* Continue anyway - file system formatting failure shouldn't prevent DFU */
+        BOOT_LOG_INF("Formatting file system for BLE DFU mode");
+        rc = halo_file_format();
+        if (rc < 0)
+        {
+            BOOT_LOG_ERR("Failed to format file system: %d", rc);
+            /* Continue anyway - file system formatting failure shouldn't prevent DFU */
+        }
     }
+
 
     /* Start BLE advertising */
     struct halo_ble_adv_params adv_params = {
