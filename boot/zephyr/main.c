@@ -45,6 +45,7 @@
 #include <halo/ble_manager.h>
 #include <halo/ble_connection.h>
 #include <halo/file_manager.h>
+#include <halo/mem_manager.h>
 #endif
 
 /* Check if Espressif target is supported */
@@ -53,21 +54,21 @@
 #include <bootloader_init.h>
 #include <esp_loader.h>
 
-#define IMAGE_INDEX_0   0
-#define IMAGE_INDEX_1   1
+#define IMAGE_INDEX_0 0
+#define IMAGE_INDEX_1 1
 
-#define PRIMARY_SLOT    0
-#define SECONDARY_SLOT  1
+#define PRIMARY_SLOT 0
+#define SECONDARY_SLOT 1
 
 #define IMAGE0_PRIMARY_START_ADDRESS \
-          DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_0), reg, 0)
+    DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_0), reg, 0)
 #define IMAGE0_PRIMARY_SIZE \
-          DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_0), reg, 1)
+    DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_0), reg, 1)
 
 #define IMAGE1_PRIMARY_START_ADDRESS \
-          DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_1), reg, 0)
+    DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_1), reg, 0)
 #define IMAGE1_PRIMARY_SIZE \
-          DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_1), reg, 1)
+    DT_PROP_BY_IDX(DT_NODE_BY_FIXED_PARTITION_LABEL(image_1), reg, 1)
 
 #endif /* CONFIG_SOC_FAMILY_ESP32 */
 
@@ -77,8 +78,7 @@
 
 const struct boot_uart_funcs boot_funcs = {
     .read = console_read,
-    .write = console_write
-};
+    .write = console_write};
 #endif
 
 #if defined(CONFIG_BOOT_USB_DFU_WAIT) || defined(CONFIG_BOOT_USB_DFU_GPIO)
@@ -125,11 +125,17 @@ K_SEM_DEFINE(boot_log_sem, 1, 1);
 #endif /* CONFIG_LOG_PROCESS_THREAD */
 #else
 /* synchronous log mode doesn't need to be initalized by the application */
-#define ZEPHYR_BOOT_LOG_START() do { } while (false)
-#define ZEPHYR_BOOT_LOG_STOP() do { } while (false)
+#define ZEPHYR_BOOT_LOG_START() \
+    do                          \
+    {                           \
+    } while (false)
+#define ZEPHYR_BOOT_LOG_STOP() \
+    do                         \
+    {                          \
+    } while (false)
 #endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
-        * !defined(ZEPHYR_LOG_MODE_MINIMAL)
-	*/
+        * !defined(ZEPHYR_LOG_MODE_MINIMAL)                             \
+        */
 
 BOOT_LOG_MODULE_REGISTER(mcuboot);
 
@@ -141,7 +147,8 @@ void os_heap_init(void);
 extern void *_vector_table_pointer;
 #endif
 
-struct arm_vector_table {
+struct arm_vector_table
+{
     uint32_t msp;
     uint32_t reset;
 };
@@ -171,7 +178,8 @@ static void do_boot(struct boot_rsp *rsp)
                                      rsp->br_hdr->ih_hdr_size);
 #endif
 
-    if (IS_ENABLED(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT)) {
+    if (IS_ENABLED(CONFIG_SYSTEM_TIMER_HAS_DISABLE_SUPPORT))
+    {
         sys_clock_disable();
     }
 
@@ -214,7 +222,7 @@ static void do_boot(struct boot_rsp *rsp)
 #elif defined(CONFIG_CPU_CORTEX_M_HAS_VTOR)
     SCB->VTOR = (uint32_t)vt;
 #endif /* CONFIG_SW_VECTOR_RELAY */
-#else /* CONFIG_BOOT_INTR_VEC_RELOC */
+#else  /* CONFIG_BOOT_INTR_VEC_RELOC */
 #if defined(CONFIG_CPU_CORTEX_M_HAS_VTOR) && defined(CONFIG_SW_VECTOR_RELAY)
     _vector_table_pointer = _vector_start;
     SCB->VTOR = (uint32_t)__vector_relay_table;
@@ -233,7 +241,7 @@ static void do_boot(struct boot_rsp *rsp)
 
 #ifndef CONFIG_SOC_FAMILY_ESP32
 
-#define SRAM_BASE_ADDRESS	0xBE030000
+#define SRAM_BASE_ADDRESS 0xBE030000
 
 static void copy_img_to_SRAM(int slot, unsigned int hdr_offset)
 {
@@ -246,13 +254,15 @@ static void copy_img_to_SRAM(int slot, unsigned int hdr_offset)
 
     area_id = flash_area_id_from_image_slot(slot);
     rc = flash_area_open(area_id, &fap);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         BOOT_LOG_ERR("flash_area_open failed with %d\n", rc);
         goto done;
     }
 
     rc = flash_area_read(fap, hdr_offset, dst, fap->fa_size - hdr_offset);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         BOOT_LOG_ERR("flash_area_read failed with %d\n", rc);
         goto done;
     }
@@ -273,8 +283,7 @@ static void do_boot(struct boot_rsp *rsp)
     BOOT_LOG_INF("ih_hdr_size = 0x%x\n", rsp->br_hdr->ih_hdr_size);
 
 #ifdef CONFIG_SOC_FAMILY_ESP32
-    int slot = (rsp->br_image_off == IMAGE0_PRIMARY_START_ADDRESS) ?
-                PRIMARY_SLOT : SECONDARY_SLOT;
+    int slot = (rsp->br_image_off == IMAGE0_PRIMARY_START_ADDRESS) ? PRIMARY_SLOT : SECONDARY_SLOT;
     /* Load memory segments and start from entry point */
     start_cpu0_image(IMAGE_INDEX_0, slot, rsp->br_hdr->ih_hdr_size);
 #else
@@ -333,14 +342,18 @@ void boot_log_thread_func(void *dummy1, void *dummy2, void *dummy3)
 
     log_init();
 
-    while (1) {
+    while (1)
+    {
 #if defined(CONFIG_LOG1) || defined(CONFIG_LOG2)
         /* support Zephyr legacy logging implementation before commit c5f2cde */
-        if (log_process(false) == false) {
+        if (log_process(false) == false)
+        {
 #else
-        if (log_process() == false) {
+        if (log_process() == false)
+        {
 #endif
-            if (boot_log_stop) {
+            if (boot_log_stop)
+            {
                 break;
             }
             k_sleep(BOOT_LOG_PROCESSING_INTERVAL);
@@ -373,8 +386,8 @@ void zephyr_boot_log_stop(void)
      */
     (void)k_sem_take(&boot_log_sem, K_FOREVER);
 }
-#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) && \
-        * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL)
+#endif /* defined(CONFIG_LOG) && !defined(ZEPHYR_LOG_MODE_IMMEDIATE) &&            \
+        * !defined(CONFIG_LOG_PROCESS_THREAD) && !defined(ZEPHYR_LOG_MODE_MINIMAL) \
         */
 
 #ifdef CONFIG_MCUBOOT_SERIAL
@@ -398,9 +411,10 @@ static void boot_serial_enter()
 
 #ifdef CONFIG_HALO
 /* BLE DFU entry reasons */
-typedef enum {
-    BLE_DFU_ENTRY_BUTTON,     /* Entered via button press */
-    BLE_DFU_ENTRY_NO_IMAGE    /* Entered because no bootable image found */
+typedef enum
+{
+    BLE_DFU_ENTRY_BUTTON,  /* Entered via button press */
+    BLE_DFU_ENTRY_NO_IMAGE /* Entered because no bootable image found */
 } ble_dfu_entry_reason_t;
 
 static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
@@ -419,11 +433,19 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
 
     io_led_set(100);
 
-    /* Initialize BLE manager for OTA */
-    rc = halo_ble_init(NULL);
+    /* Initialize memory manager */
+    rc = halo_mem_init();
     if (rc < 0)
     {
-        BOOT_LOG_ERR("Failed to initialize BLE manager: %d", rc);
+        BOOT_LOG_ERR("Failed to initialize memory manager: %d", rc);
+        return;
+    }
+
+    /* Initialize file system */
+    rc = halo_file_init();
+    if (rc < 0)
+    {
+        BOOT_LOG_ERR("Failed to initialize file system: %d", rc);
         return;
     }
 
@@ -439,6 +461,13 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
         }
     }
 
+    /* Initialize BLE manager for OTA */
+    rc = halo_ble_init(NULL);
+    if (rc < 0)
+    {
+        BOOT_LOG_ERR("Failed to initialize BLE manager: %d", rc);
+        return;
+    }
 
     /* Start BLE advertising */
     struct halo_ble_adv_params adv_params = {
@@ -455,15 +484,17 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
     }
 
     /* Wait for button to be released if entered via button press */
-    if (allow_exit) {
+    if (allow_exit)
+    {
         BOOT_LOG_INF("Waiting for button to be released...");
-        while (io_detect_pin()) {
+        while (io_detect_pin())
+        {
             k_sleep(K_MSEC(50));
         }
         BOOT_LOG_INF("Button released, DFU mode active");
     }
 
-    halo_ble_conn_update_activity();
+    // halo_ble_conn_update_activity();
 
     while (1)
     {
@@ -483,10 +514,10 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
         }
 
         // show inactivity timeout progress every 1000 ms
-        if (allow_exit && (k_uptime_get_32() % 1000) < 20) {
+        if (allow_exit && (k_uptime_get_32() % 1000) < 20)
+        {
             uint32_t elapsed = k_uptime_get_32() - halo_ble_conn_get_last_activity();
-            uint32_t remaining = (elapsed >= CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS) ?
-                                 0 : (CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS - elapsed);
+            uint32_t remaining = (elapsed >= CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS) ? 0 : (CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS - elapsed);
             BOOT_LOG_INF("BLE DFU inactivity timeout in %d/%d s", remaining / 1000, CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS / 1000);
         }
 
@@ -525,7 +556,8 @@ int main(void)
 
     /* Check for button press > 10 seconds after reboot to enter BLE DFU */
 #if defined(CONFIG_HALO) && defined(CONFIG_BOOT_BLE_DFU_ENTRANCE_GPIO)
-    if (io_detect_pin()) {
+    if (io_detect_pin())
+    {
         BOOT_LOG_INF("Button pressed at startup, checking for 10s hold...");
         uint32_t start_time = k_uptime_get_32();
         bool button_held = true;
@@ -547,7 +579,8 @@ int main(void)
             k_sleep(K_MSEC(20));
         }
 
-        if (button_held) {
+        if (button_held)
+        {
             BOOT_LOG_INF("Button held for %d+ ms, entering BLE DFU mode",
                          CONFIG_HALO_BLE_DFU_BUTTON_HOLD_TIME_MS);
             boot_ble_dfu_enter(BLE_DFU_ENTRY_BUTTON);
@@ -557,19 +590,22 @@ int main(void)
 
 #ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
     if (io_detect_pin() &&
-            !io_boot_skip_serial_recovery()) {
+        !io_boot_skip_serial_recovery())
+    {
         boot_serial_enter();
     }
 #endif
 
 #ifdef CONFIG_BOOT_SERIAL_PIN_RESET
-    if (io_detect_pin_reset()) {
+    if (io_detect_pin_reset())
+    {
         boot_serial_enter();
     }
 #endif
 
 #if defined(CONFIG_BOOT_USB_DFU_GPIO)
-    if (io_detect_pin()) {
+    if (io_detect_pin())
+    {
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
         io_led_set(1);
 #endif
@@ -577,9 +613,12 @@ int main(void)
         mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_ENTERED);
 
         rc = usb_enable(NULL);
-        if (rc) {
+        if (rc)
+        {
             BOOT_LOG_ERR("Cannot enable USB");
-        } else {
+        }
+        else
+        {
             BOOT_LOG_INF("Waiting for USB DFU");
             wait_for_usb_dfu(K_FOREVER);
             BOOT_LOG_INF("USB DFU wait time elapsed");
@@ -587,9 +626,12 @@ int main(void)
     }
 #elif defined(CONFIG_BOOT_USB_DFU_WAIT)
     rc = usb_enable(NULL);
-    if (rc) {
+    if (rc)
+    {
         BOOT_LOG_ERR("Cannot enable USB");
-    } else {
+    }
+    else
+    {
         BOOT_LOG_INF("Waiting for USB DFU");
 
         mcuboot_status_change(MCUBOOT_STATUS_USB_DFU_WAITING);
@@ -616,11 +658,11 @@ int main(void)
 #endif
 #endif
 
-
     FIH_CALL(boot_go, fih_rc, &rsp);
 
 #ifdef CONFIG_BOOT_SERIAL_BOOT_MODE
-    if (io_detect_boot_mode()) {
+    if (io_detect_boot_mode())
+    {
         /* Boot mode to stay in bootloader, clear status and enter serial
          * recovery mode
          */
@@ -630,18 +672,20 @@ int main(void)
 
 #ifdef CONFIG_BOOT_SERIAL_WAIT_FOR_DFU
     timeout_in_ms -= (k_uptime_get_32() - start);
-    if( timeout_in_ms <= 0 ) {
+    if (timeout_in_ms <= 0)
+    {
         /* at least one check if time was expired */
         timeout_in_ms = 1;
     }
-    boot_serial_check_start(&boot_funcs,timeout_in_ms);
+    boot_serial_check_start(&boot_funcs, timeout_in_ms);
 
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
     io_led_set(0);
 #endif
 #endif
 
-    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+    if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS))
+    {
         BOOT_LOG_ERR("Unable to find bootable image");
 
         mcuboot_status_change(MCUBOOT_STATUS_NO_BOOTABLE_IMAGE_FOUND);
