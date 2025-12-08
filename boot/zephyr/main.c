@@ -21,6 +21,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/__assert.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/usb/usb_device.h>
@@ -469,24 +470,10 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
         return;
     }
 
-    /* Start BLE advertising */
-    struct halo_ble_adv_params adv_params = {
-        .interval_min = 40,  /* 0.625ms units, 40 = 25ms */
-        .interval_max = 200, /* 0.625ms units, 200 = 125ms */
-        .duration = 0,       /* Advertise indefinitely */
-        .channel_map = 0x07, /* All channels */
-    };
-    rc = halo_ble_adv_start(&adv_params);
-    if (rc < 0)
-    {
-        BOOT_LOG_ERR("Failed to start BLE advertising: %d", rc);
-        return;
-    }
-
     /* Wait for button to be released if entered via button press */
     if (allow_exit)
     {
-        BOOT_LOG_INF("Waiting for button to be released...");
+        BOOT_LOG_INF("Waiting for button to abe released...");
         while (io_detect_pin())
         {
             k_sleep(K_MSEC(50));
@@ -503,6 +490,7 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
         {
             BOOT_LOG_INF("Exiting BLE DFU mode due to inactivity (%d ms timeout)",
                          CONFIG_HALO_BLE_DFU_INACTIVITY_TIMEOUT_MS);
+            sys_reboot(SYS_REBOOT_COLD);
             break;
         }
 
@@ -510,6 +498,7 @@ static void boot_ble_dfu_enter(ble_dfu_entry_reason_t reason)
         if (allow_exit && io_detect_pin())
         {
             BOOT_LOG_INF("Exiting BLE DFU mode due to button press");
+            sys_reboot(SYS_REBOOT_COLD);
             break;
         }
 
